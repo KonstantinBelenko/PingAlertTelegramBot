@@ -24,4 +24,4 @@ for user in users:
     
     bot.stop_polling()
 
-bot.infinity_polling()
+bot.polling()
