@@ -19,7 +19,7 @@ for user in users:
         print(current_time + ": " + str(r.status_code) + "\n")
     except Exception as e:
         msg = f"!!!WARNING!!! \n{website_link} does not respond! \nError: " + str(e) + " \n\n" + current_time
-        print(current_time + ": " + str(r.status_code) + "\n")
+        print(current_time + ": ERROR: " + str(e) "\n")
         bot.send_message(user, msg)
     
     bot.stop_polling()
