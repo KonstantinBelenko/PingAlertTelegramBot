@@ -5,11 +5,6 @@ from config import bot_token, users, website_link
 
 bot = telebot.TeleBot(bot_token, parse_mode=None)
 
-@bot.message_handler()
-def handle_messages(msg):
-    print(msg.from_user)
-
-
 for user in users:
     now = datetime.now()
     current_time = now.strftime("%H:%M:%S")
