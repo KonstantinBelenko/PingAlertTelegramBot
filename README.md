@@ -55,3 +55,5 @@ $ EDITOR=vim crontab -e
 3. Press `i` to enter insert mode and press `shift + insert` to paste copied string.
 4. You can configure this cronjob schedule using this [article](https://linuxize.com/post/scheduling-cron-jobs-with-crontab/) (It runs the script every 10m by default)
 5. Save and exit vim safely by pressing `Esc` and typing `:wq` followed by 'Enter' (use [this article](https://stackoverflow.com/questions/11828270/how-do-i-exit-the-vim-editor) if encounter problems)
+6. Restart the cronjob and enjoy your alert bot
+`$ sudo systemctl restart cron`
