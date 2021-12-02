@@ -1,1 +1,1 @@
-*/10 * * * * /usr/bin/python <main.py PATH> >> <cronjob.log PATH> 2>&1
+*/10 * * * * /usr/bin/python3 $HOME/python/PingAlertTelegramBot/main.py >> $HOME/python/PingAlertTelegramBot/cronjob.log 2>&1
