@@ -33,7 +33,7 @@ You may change the cronjob string if you change the project path
 
 ```
 # Create a python folder and enter it
-$ cd ~ && mkdir python && cd python 
+$ cd ~ && mkdir python; cd python 
 
 # Download project repo
 $ git clone https://github.com/KonstantinBelenko/PingAlertTelegramBot.git && cd PingAlertTelegramBot
