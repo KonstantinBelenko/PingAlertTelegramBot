@@ -1,3 +1,9 @@
 bot_token = ""
-users = []
-website_links =["example.com"]
+
+users = [
+    
+]
+
+website_links =[
+    "https://www.google.com", 
+]
