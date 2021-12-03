@@ -1,8 +1,6 @@
 bot_token = ""
 
-users = [
-    
-]
+admin_users = []
 
 website_links =[
     "https://www.google.com", 

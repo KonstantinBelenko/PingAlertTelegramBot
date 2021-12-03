@@ -1,1 +1,0 @@
-*/10 * * * * /usr/bin/python3 $HOME/python/PingAlertTelegramBot/main.py >> $HOME/python/PingAlertTelegramBot/cronjob.log 2>&1

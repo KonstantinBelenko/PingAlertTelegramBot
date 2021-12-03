@@ -1,7 +1,7 @@
 import requests
 import telebot
 from datetime import datetime
-from config import bot_token, users, website_links
+from config import bot_token, website_links
 
 bot = telebot.TeleBot(bot_token, parse_mode=None)
 
