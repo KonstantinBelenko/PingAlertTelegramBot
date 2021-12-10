@@ -44,16 +44,24 @@ if os.path.isfile('bot.db'):
     
     logging.info('Found bot.db, connecting')
     try:
+        # Add users
         query_output = sql_fetch_query("""SELECT t_id FROM users WHERE admin = 1;""")
         for entry in query_output:
             admin_users.append(entry[0])
+
+        # Add links
+        query_output = sql_fetch_query("""SELECT link FROM links;""")
+        website_links = []
+        for link in query_output:
+            website_links.append(link[0])
+
     except Exception as e:
         logging.critical(f'DB ERROR {e}')
     finally:
         logging.info('Connected to the bot.db')
     
 else: # Create new db if no db exists
-    logging.info('Did not found .db file, creating new bot.db file')
+    logging.info('Did not find .db file, creating new bot.db file')
     
     try:
         sql_exec_query('''CREATE TABLE users (
@@ -80,7 +88,7 @@ else: # Create new db if no db exists
     finally:
         logging.info('Created bot.db')
 
-bot = telebot.TeleBot(bot_token, parse_mode='html')
+bot = telebot.TeleBot(bot_token, parse_mode=None)
 
 # MESSAGE HANDLERS
 @bot.message_handler(commands=['start'], func=lambda msg: msg.from_user.id in admin_users)
@@ -131,7 +139,7 @@ def getinfo(msg):
 
     # Website links
 
-    bot.reply_to(msg, f"Schedule time: <b>every {schedule[0][0]} minutes</b> \nWebsite links: \n{links_text}")
+    bot.reply_to(msg, f"Schedule time: every {schedule[0][0]} minutes \nWebsite links: \n{links_text}")
 
 
 ###### ADD USER ######
@@ -225,17 +233,19 @@ def post_editlinks(msg):
 
     links = msg.text.split('\n')
     links = [link.strip() for link in links]
-    
+
     links_query = ""
+    del website_links[:]
+
     for i, link in enumerate(links):
+        website_links.append(link)
         if i == len(links)-1:
             links_query += f"('{link}');"
         else:
             links_query += f"('{link}'), "
 
     sql_exec_query('''DELETE FROM links''')
-    query_msg = f'''INSERT INTO links (link) VALUES {links_query}'''
-    sql_exec_query(query_msg)
+    sql_exec_query(f'''INSERT INTO links (link) VALUES {links_query}''')
     bot.reply_to(msg, 'Links updated...')
 
 
@@ -270,30 +280,34 @@ def test_sites(ping_time):
         now = datetime.now()
         current_time = now.strftime("%H:%M:%S")
 
-        getuser_query = sql_fetch_query("""SELECT t_id FROM users;""")
-
         logging.info('')
         logging.info('PINGING WEBSITES START')
-        
+
+        # Fetch users from query so that not only users from 'admin_users are notified'
+        user_query = sql_fetch_query("SELECT t_id FROM users")
+
         for site_url in website_links:
 
             try: # We use `try` here because if site does not respond - request module will call an exception
 
                 r = requests.get(site_url)   
+                if r.status_code > 200:
+                    raise Exception(f"Status code is not 200: It's {r.status_code}")
                 logging.info(f'{site_url} OKAY')         
                 logging.info(f'STATUS CODE: {str(r.status_code)}')    
             
             except Exception as e:
                 logging.info(f'{site_url} ERROR')         
-                logging.info(f'STATUS CODE: {str(e)}')
+                logging.info(f'Response: {str(e)}')
 
-                for user in getuser_query:
-                    user_id = user[0] # we select user id from user[0] because sql query returns a tuple like this (id, )
+                for user in user_query:
+                    user_id = user[0]
 
                     try:
+                        logging.warning(f'Sending Warning to user {user_id} : {e}')
                         bot.send_message(user_id, f"{site_url} does not respond! \nPing response: {str(e)} \n\nTime: {current_time}")
-                    except:
-                        logging.warning(f'USER ID [{user_id}] is wrong')
+                    except Exception as e:
+                        logging.warning(f'Could not send message to user! \n{e}')
 
         logging.info('PINGING WEBSITES END')
         logging.info('')
