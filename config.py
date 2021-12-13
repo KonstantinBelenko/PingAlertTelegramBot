@@ -11,4 +11,7 @@ website_links =[
 ]
 
 # Default schedule (in minutes)
-def_schedule = 15
+def_schedule = 40
+
+# Full Chrome driver executable path
+exec_path = "$HOME/chromedriver"

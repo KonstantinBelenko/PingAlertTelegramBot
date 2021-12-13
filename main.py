@@ -1,12 +1,20 @@
-from typing import List
-import requests, telebot, sqlite3
-import os, threading, schedule
-import logging
-from datetime import datetime
+"""
+TELEBOT WRAPPER FUNCTIONS PERFORM GENERAL VERIFICATIONS
+---------
+Telebot wrappers automatically checks whether requesting user has rights to execute 
+function or not, and performs some additional checks required by the function.
+"""
+import telebot
 from telebot import types
-from config import bot_token, website_links, admin_users, def_schedule
+from config import bot_token, website_links, admin_users, def_schedule, exec_path
 
-# CONFIGURATION
+import os, threading, schedule, logging, requests, sqlite3
+from datetime import datetime
+
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException
+
+# LOGGIN CONFIGURATION
 logging.basicConfig(
     filename="main.log", 
     format='%(asctime)s [%(levelname)s]: %(message)s',
@@ -36,7 +44,7 @@ def sql_exec_query(query_req: str) -> None:
         cursor = conn.cursor()
         cursor.execute(query_req)
 
-# CONNECTIONS
+# SQLITE3 DB CONFIGURATION
 logging.info('')
 logging.info('Bot started: Looking for a .db file')
 
@@ -70,45 +78,37 @@ else: # Create new db if no db exists
                             name TEXT NOT NULL,
                             admin BOOL DEFAULT 0);''')
 
-        sql_exec_query('''CREATE TABLE links (
-                            id INTEGER PRIMARY KEY,
-                            link TEXT NOT NULL);''')
-
         sql_exec_query('''CREATE TABLE schedule (
                             id INTEGER PRIMARY KEY,
                             minutes INTEGER NOT NULL);''')
 
         sql_exec_query(f'''INSERT INTO schedule (minutes) VALUES ({def_schedule})''')
 
-        for link in website_links:
-            sql_exec_query(f'''INSERT INTO links (link) VALUES ('{link}')''')
-
     except Exception as e:
         logging.critical(f'DB ERROR {e}')
     finally:
         logging.info('Created bot.db')
 
+
+# BOT MESSAGE HANDLERS
 bot = telebot.TeleBot(bot_token, parse_mode=None)
 
-# MESSAGE HANDLERS
+# START
 @bot.message_handler(commands=['start'], func=lambda msg: msg.from_user.id in admin_users)
 def start_message(msg):
     logging.info(f'USER START [{msg.from_user.id}] {msg.from_user.username}')
+    
     markup = types.ReplyKeyboardMarkup(row_width=3)
     markup.add(
         types.KeyboardButton(command_names['get_users']),
         types.KeyboardButton(command_names['add_user']),
         types.KeyboardButton(command_names['del_user']),
-
-        types.KeyboardButton(command_names['get_info']),
-        types.KeyboardButton(command_names['edit_links']),
-        #types.KeyboardButton(command_names['edit_schedule']),
-    )
+        types.KeyboardButton(command_names['get_info']),)
 
     bot.reply_to(msg, 'Got you admin 😉', reply_markup=markup)
 
 
-###### GET USERS ######
+# GET USERS
 @bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
                                         and msg.content_type == 'text' \
                                         and msg.text == command_names['get_users'])
@@ -124,7 +124,7 @@ def getusers(msg):
     bot.reply_to(msg, out_msg)
 
 
-###### GET INFO ######
+# GET INFO
 @bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
                                         and msg.content_type == 'text' \
                                         and msg.text == command_names['get_info'])
@@ -132,27 +132,23 @@ def getinfo(msg):
     logging.info(f'GETINFO by: [{msg.from_user.id}] {msg.from_user.username} {msg.from_user.first_name} {msg.from_user.last_name}')
 
     schedule = sql_fetch_query('''SELECT minutes FROM schedule''')
-    links = sql_fetch_query('''SELECT link FROM links''')
     links_text = ''
-    for link in links:
-        links_text += f'\t\t\t{link[0]}\n'
+    for link in website_links:
+        links_text += f'\t\t\t{link}\n'
 
     # Website links
-
     bot.reply_to(msg, f"Schedule time: every {schedule[0][0]} minutes \nWebsite links: \n{links_text}")
 
 
-###### ADD USER ######
+# ADD USER
 @bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
                                         and msg.content_type == 'text' \
                                         and msg.text == command_names['add_user'])
 def pre_adduser(msg):
     logging.info(f'ADDUSER INIT by: [{msg.from_user.id}] {msg.from_user.username}')
-    bot_reply = bot.send_message( msg.chat.id, 
-        '🍥🍥🍥 ADD USER 🍥🍥🍥\nPlease send the message in the next format:\
-            \nGet your id here: @userinfobot \n\n[user_id] [user_name] [admin(0 or 1)]\nexample: 12345 bob 0',        
-    )
-
+    reply_text = """🍥🍥🍥 ADD USER 🍥🍥🍥\nPlease send the message in the next format:
+                 \nGet your id here: @userinfobot \n\n[user_id] [user_name] [admin(0 or 1)]\nexample: 12345 bob 0"""   
+    bot_reply = bot.send_message(msg.chat.id, reply_text)
     bot.register_next_step_handler(bot_reply, post_adduser)
 
 def post_adduser(msg):
@@ -162,7 +158,6 @@ def post_adduser(msg):
         return
 
     try:
-
         if int(split_msg[2]) > 1 or int(split_msg[2]) < 0:
             bot.send_message(msg.chat.id, "Wrong admin type!")
             return
@@ -185,7 +180,7 @@ def post_adduser(msg):
         logging.warning(e)
 
 
-###### DEL USER ######
+# DELETE USER
 @bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
                                         and msg.content_type == 'text' \
                                         and msg.text == command_names['del_user'])
@@ -217,39 +212,8 @@ def post_deluser(msg):
         bot.send_message(msg.chat.id, f"Error: \n{str(e)}")
         logging.info(f'DELUSER FAILED')
 
-###### EDIT LINKS ######
-@bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
-                                        and msg.content_type == 'text' \
-                                        and msg.text == command_names['edit_links'])
-def pre_editlinks(msg):
-    logging.info(f'EDIT LINKS by: [{msg.from_user.id}] {msg.from_user.username}')
-    bot_reply = bot.reply_to(msg, 'Send list of links you want to monitor in this format: \n\nlink1\nlink2\nlink3 \n\nSend /cancel to abort')
-    bot.register_next_step_handler(bot_reply, post_editlinks)
 
-def post_editlinks(msg):
-    if msg.text.strip() == '/cancel':
-        bot.reply_to(msg, 'Edit canceled')
-        return
-
-    links = msg.text.split('\n')
-    links = [link.strip() for link in links]
-
-    links_query = ""
-    del website_links[:]
-
-    for i, link in enumerate(links):
-        website_links.append(link)
-        if i == len(links)-1:
-            links_query += f"('{link}');"
-        else:
-            links_query += f"('{link}'), "
-
-    sql_exec_query('''DELETE FROM links''')
-    sql_exec_query(f'''INSERT INTO links (link) VALUES {links_query}''')
-    bot.reply_to(msg, 'Links updated...')
-
-
-# ###### EDIT SCHEDULE ######
+# EDIT SCHEDULE 
 # @bot.message_handler(func=lambda msg: msg.from_user.id in admin_users \
 #                                         and msg.content_type == 'text' \
 #                                         and msg.text == command_names['edit_schedule'])
@@ -290,11 +254,32 @@ def test_sites(ping_time):
 
             try: # We use `try` here because if site does not respond - request module will call an exception
 
+                logging.info(f'{site_url} ')         
+
                 r = requests.get(site_url)   
                 if r.status_code > 200:
+                    logging.info(f'STATUS CODE: {str(r.status_code)}') 
                     raise Exception(f"Status code is not 200: It's {r.status_code}")
-                logging.info(f'{site_url} OKAY')         
-                logging.info(f'STATUS CODE: {str(r.status_code)}')    
+
+                # Option 1 - with ChromeOptions
+                chrome_options = webdriver.ChromeOptions()
+                chrome_options.add_argument('--headless')
+                chrome_options.add_argument('--no-sandbox') # required when running as root user. otherwise you would get no sandbox errors. 
+                driver = webdriver.Chrome(executable_path=exec_path, chrome_options=chrome_options, service_args=['--verbose', '--log-path=/tmp/chromedriver.log'])
+            
+                driver.get("https://stobox.exchange/en/markets")
+
+                try:
+                    error_element = driver.find_element_by_class_name("toaster-item-message")
+                except NoSuchElementException:
+                    logging.info(f'ERROR BLOCK: {str(False)}') 
+                    driver.close()
+                else: 
+                    # Notify user if error block is present
+                    driver.close()
+                    logging.info(f'ERROR BLOCK: {str(True)}')   
+
+                    raise Exception(f"WEBSITE HAVE ERRORS: {e}")
             
             except Exception as e:
                 logging.info(f'{site_url} ERROR')         
@@ -308,6 +293,7 @@ def test_sites(ping_time):
                         bot.send_message(user_id, f"{site_url} does not respond! \nPing response: {str(e)} \n\nTime: {current_time}")
                     except Exception as e:
                         logging.warning(f'Could not send message to user! \n{e}')
+                        
 
         logging.info('PINGING WEBSITES END')
         logging.info('')
@@ -317,8 +303,8 @@ def test_sites(ping_time):
         schedule.run_pending()
 
 # PING FUNCTION THREAD
-chedule_tile = sql_fetch_query('''SELECT minutes FROM schedule''')
-ping_thread = threading.Thread(target=test_sites, args=(chedule_tile[0][0], ))
+schedule_time = sql_fetch_query('''SELECT minutes FROM schedule''')
+ping_thread = threading.Thread(target=test_sites, args=(schedule_time[0][0], ))
 ping_thread.start()
 logging.info('Started ping schedule')
 
